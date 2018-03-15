@@ -1,9 +1,13 @@
 import numpy as np
 import sys
 
-REGISTERS_COUNT = 8
+REGISTERS_COUNT = 9 
 IP_ADDRESS = 0  # instructions pointer
 SP_ADDRESS = 1  # stack pointer
+
+# количество ячеек, выделенных для хранения информации об адресах первых инструкций функций
+# [имя, адрес, имя, адрес,...]
+FUNC_START_ADDR_SIZE = 10
 
 INSTRUCTION_SIZE = 3  # количество ячеек, занимаемое одной инструкцией
 
@@ -13,16 +17,20 @@ class VirtualMachine:
     
     def __init__(self, size):
         self.memory = np.zeros(size, dtype=np.int)
-        self.memory[IP_ADDRESS] = REGISTERS_COUNT  # первые ячейки памяти выделены для регистров
+        # первые ячейки памяти выделены для регистров и адресов первых инструкций функций
+        self.memory[IP_ADDRESS] = REGISTERS_COUNT + FUNC_START_ADDR_SIZE
         # стек начинается в последней ячейке памяти и растёт к началу выделенного участка
         self.memory[SP_ADDRESS] = size - 1 
         
         # Для поддержки функций 
         
         # Хранит адрес первой инструкции функции с числовым названием (ключ)
-        self.func_start_address = {}
+        #self.func_start_address = {}
         # флаг, отвечающий за считывание объявления функции
-        self.func_prototype_reading = False 
+        #self.func_prototype_reading = False 
+        # в последнем регистре - флаг, отвечющй за считывание объявления функции func_prototype_reading
+        self.memory[REGISTERS_COUNT - 1] = 0  
+    
     
     # Работа с отдельными ячейками памяти
     
@@ -41,7 +49,7 @@ class VirtualMachine:
         self.func_prototype_reading = False 
         
         for code_idx in range(len(program)):
-            self.memory[REGISTERS_COUNT + code_idx] = program[code_idx]
+            self.memory[REGISTERS_COUNT + FUNC_START_ADDR_SIZE + code_idx] = program[code_idx]
     
     def read_program_from_file(self, filename):
         with open(filename) as f:
@@ -73,7 +81,7 @@ class VirtualMachine:
         """
         data = self.read_from_address(src_addr)
         self.write_value_to_address(dest_addr, data)
-        self.move_to_next_instruction() ## возможно, тут понадобится какое-нибудь условие
+        self.move_to_next_instruction()
         
     def add(self, dest_addr, addition_addr):
         """
@@ -84,7 +92,7 @@ class VirtualMachine:
         dest_value = self.read_from_address(dest_addr)
         
         self.write_value_to_address(dest_addr, dest_value + addition_value)
-        self.move_to_next_instruction() ## возможно, тут понадобится какое-нибудь условие
+        self.move_to_next_instruction()
         
     def jump(self, dest_addr):
         """
@@ -115,8 +123,14 @@ class VirtualMachine:
         принимает числовое "имя" функции
         Инструкция записывается: [6, 0, name_num]
         """
-        self.func_prototype_reading = True
-        self.func_start_address[name_num] = self.read_from_address(IP_ADDRESS) + INSTRUCTION_SIZE
+        self.write_value_to_address(REGISTERS_COUNT - 1, 1)
+        
+        # индекс, начиная с которого ещё нет записей об именах функций
+        index_to_write = list(self.memory[REGISTERS_COUNT : REGISTERS_COUNT + FUNC_START_ADDR_SIZE]).index(0)
+        index_to_write = index_to_write + REGISTERS_COUNT
+        self.write_value_to_address(index_to_write, name_num)
+        self.write_value_to_address(index_to_write + 1, self.read_from_address(IP_ADDRESS) + INSTRUCTION_SIZE)
+        
         self.move_to_next_instruction()
         
     def function_end(self):
@@ -124,8 +138,8 @@ class VirtualMachine:
         Определяет окончание определеня функции
         Инструкция записывается: [7, 0, 0]
         """
-        if self.func_prototype_reading:
-            self.func_prototype_reading = False
+        if self.read_from_address(REGISTERS_COUNT - 1) == 1:
+            self.write_value_to_address(REGISTERS_COUNT - 1, 0)
             self.move_to_next_instruction()
         else:  # это было не определение функции, а вызов
             # Выходим из функции - переход на следующую инструкцию, адрес которой лежит в стеке
@@ -158,7 +172,15 @@ class VirtualMachine:
         """
         # Кладём в стек адрес следующей за вызовом функции инструкции
         self.push(self.read_from_address(IP_ADDRESS) + INSTRUCTION_SIZE)
-        self.write_value_to_address(IP_ADDRESS, self.func_start_address[name_num])
+        
+        # Нужно найти адрес, с которого начинается вызов функции
+        func_start_addresses = self.memory[REGISTERS_COUNT : REGISTERS_COUNT + FUNC_START_ADDR_SIZE]
+        
+        for i in range(len(func_start_addresses)):
+            if i % 2 == 0:
+                # сравниваем значение в ячейке с требуемым именем
+                if self.read_from_address(i + REGISTERS_COUNT) == name_num:
+                    self.write_value_to_address(IP_ADDRESS, func_start_addresses[i + 1])
         
     def top(self, reg_addr):
         """
@@ -177,7 +199,7 @@ class VirtualMachine:
         dest_value = self.read_from_address(dest_addr)
         
         self.write_value_to_address(dest_addr, dest_value - subtract_value)
-        self.move_to_next_instruction() ## возможно, тут понадобится какое-нибудь условие
+        self.move_to_next_instruction()
         
     def assign(self, dest_addr, value):
         """
@@ -232,7 +254,8 @@ class VirtualMachine:
         arg_second = instruction_value[2]
         
         # Если сейчас считываем определение функции, ничего выполнять не нужно, просто переходим дальше
-        if self.func_prototype_reading and not instruction_id == INSTRUCTIONS_DICT['FEND']:
+        func_prototype_reading = self.read_from_address(REGISTERS_COUNT - 1)
+        if func_prototype_reading and not instruction_id == INSTRUCTIONS_DICT['FEND']:
             self.move_to_next_instruction()
             return True
         
@@ -308,8 +331,9 @@ class VirtualMachine:
         Запускается работа машины.
         Машина работает с выделенным участком памяти, пока не будет прочитана инструкция STOP
         """
-        self.memory[IP_ADDRESS] = REGISTERS_COUNT
+        self.memory[IP_ADDRESS] = REGISTERS_COUNT + FUNC_START_ADDR_SIZE
         self.memory[SP_ADDRESS] = len(self.memory) - 1
+        self.memory[REGISTERS_COUNT] = 0
         
         while self.interpret_current_comand():
             continue

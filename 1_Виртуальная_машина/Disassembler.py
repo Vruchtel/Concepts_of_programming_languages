@@ -1,11 +1,12 @@
 import numpy as np
 import sys
 
-REGISTERS_COUNT = 8
+REGISTERS_COUNT = 9
+FUNC_START_ADDR_SIZE = 10
 
 INSTRUCTION_SIZE = 3  # количество ячеек, занимаемое одной инструкцией
 
-REGISTERS_DICT = {'ip':0, 'sp':1, 'r1':2, 'r2':3, 'r3':4, 'r4':5, 'r5':6, 'r6':7}   
+REGISTERS_DICT = {'ip':0, 'sp':1, 'r1':2, 'r2':3, 'r3':4, 'r4':5, 'r5':6, 'r6':7, 'rf':8}      
 
 def get_reg_name(reg_addr):
     """
@@ -47,7 +48,7 @@ class Disassembler:
             
         if instruction == 2:  # JUMP
             if use_labels:
-                address = (arg_second - REGISTERS_COUNT) / INSTRUCTION_SIZE
+                address = (arg_second - REGISTERS_COUNT - FUNC_START_ADDR_SIZE) / INSTRUCTION_SIZE
                 if address in self.address_to_label:
                     string_result = 'JUMP ' + self.address_to_label[address]
                 else:
@@ -92,7 +93,7 @@ class Disassembler:
             
         if instruction == 14:  # IFNIL
             if use_labels:
-                address = (arg_second - REGISTERS_COUNT) / INSTRUCTION_SIZE
+                address = (arg_second - REGISTERS_COUNT - FUNC_START_ADDR_SIZE) / INSTRUCTION_SIZE
                 if address in self.address_to_label:
                     string_result = 'IFNIL ' + get_reg_name(arg_first) + ' ' + self.address_to_label[address]
                 else:

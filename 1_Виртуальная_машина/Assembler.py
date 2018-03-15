@@ -1,15 +1,19 @@
 import numpy as np
 import sys
 
-REGISTERS_COUNT = 8
+REGISTERS_COUNT = 9 
 IP_ADDRESS = 0  # instructions pointer
 SP_ADDRESS = 1  # stack pointer
+
+# количество ячеек, выделенных для хранения информации об адресах первых инструкций функций
+# [имя, адрес, имя, адрес,...]
+FUNC_START_ADDR_SIZE = 10
 
 INSTRUCTION_SIZE = 3  # количество ячеек, занимаемое одной инструкцией
 
 INSTRUCTIONS_DICT = {'MOV':0, 'ADD':1, 'JUMP':2, 'STOP':3, 'READ':4, 'PRINT':5, 'FBEG':6, 'FEND':7, 'PUSH':8, 'POP':9, 'CALL':10, 'TOP':11, 'SUB':12, 'ASSIGN':13, 'IFNIL':14, 'PUSHREG':15, 'PUTC':16}
 
-REGISTERS_DICT = {'ip':0, 'sp':1, 'r1':2, 'r2':3, 'r3':4, 'r4':5, 'r5':6, 'r6':7}    
+REGISTERS_DICT = {'ip':0, 'sp':1, 'r1':2, 'r2':3, 'r3':4, 'r4':5, 'r5':6, 'r6':7, 'rf':8}    
 
 class Assembler:
     
@@ -91,7 +95,7 @@ class Assembler:
         
         for line in lines:
             for label, num in label_to_num.items():
-                line = line.replace(label, str(num * INSTRUCTION_SIZE + REGISTERS_COUNT))
+                line = line.replace(label, str(num * INSTRUCTION_SIZE + REGISTERS_COUNT + FUNC_START_ADDR_SIZE))
             result.append(line)
         self.program_text = result
         
