@@ -10,11 +10,6 @@
 #include "MacrosDefinitions.h"
 #include "ConvertStringToSet.h"
 
-/*template <typename T>
-std::string GetClassName() {
-	return GetTypeId<T>().className;
-}*/
-
 long hash(std::string str) {
 	long result = 0;
 	long p = 54059;
@@ -46,7 +41,6 @@ public:
 
 	void CalculateExistanseOfPaths() {
 		classToDeepParents = findPaths(classToParents);
-		//classToDeepChildren = findPaths(classToChildren);
 	}
 
 	// check if there is any deep path from child to parent
@@ -57,20 +51,11 @@ public:
 		return false;
 	}
 
-	// check if there is any deep path from parent to child
-	/*bool isDeepPathFromParentToChild(std::string parent, std::string child) {
-		if (classToDeepChildren[parent].find(child) != classToDeepChildren[parent].end()) {
-			return true;
-		}
-		return false;
-	}*/
-
 private:
 	std::map<std::string, std::set<std::string>> classToParents;
 	std::map<std::string, std::set<std::string>> classToChildren;
 
 	std::map<std::string, std::set<std::string>> classToDeepParents;
-	//std::map<std::string, std::set<std::string>> classToDeepChildren;
 
 	// finds, if there is a path from one vertice to another
 	// if one class is anothers child or one class is anothers parents
@@ -248,24 +233,14 @@ int main() {
 	std::cout << "hash_code" << std::endl;
 	std::cout << TYPEID(a).hash_code() << std::endl;
 	std::cout << TYPEID(c).hash_code() << std::endl;
+	std::cout << std::endl;
 
 	A *aa = new A();
-	std::cout << aa->GetClassName() << std::endl; // A
-
 	A *ab = new B();
-	std::cout << ab->GetClassName() << std::endl; // B
-
 	A *ad = new D();
-	std::cout << ad->GetClassName() << std::endl; // D
-
 	B *bd = new D();
-	std::cout << bd->GetClassName() << std::endl; // D
-
 	C *cd = new D();
-	std::cout << cd->GetClassName() << std::endl; // D
-
 	D *dd = new D();
-	std::cout << dd->GetClassName() << std::endl; // D
 
 	std::cout << std::endl;
 	std::cout << "bd " << bd << std::endl;
