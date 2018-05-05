@@ -6,9 +6,7 @@
 #include <vector>
 #include <math.h>
 
-#include "StaticCastUnsafe.hpp"
 #include "MacrosDefinitions.h"
-#include "ConvertStringToSet.h"
 
 long hash(std::string str) {
 	long result = 0;
@@ -24,109 +22,22 @@ class BaseParent {
 public:
 	virtual std::string GetClassName() { return "undefined"; }
 	static std::string GetStaticClassName() { return "BaseParent"; }
+
+	std::map<std::string, void*> tmap;
 };
 
-// save information about all parents and all children
-class ClassesGraph {
+template <typename T>
+class TMapWriter {
 public:
-	void AppendClassWithParents(std::string child, std::string parentsStr) {
-		std::set<std::string> parentsSet = std::set<std::string>();
-		ConvertStringToSet(parentsStr, parentsSet);
-
-		classToParents[child] = parentsSet;
-		for (std::string parent : parentsSet) {
-			classToChildren[parent].insert(child);
-		}
-	}
-
-	void CalculateExistanseOfPaths() {
-		classToDeepParents = findPaths(classToParents);
-	}
-
-	// check if there is any deep path from child to parent
-	bool isDeepPathFromChildToParent(std::string child, std::string parent) {
-		if (classToDeepParents[child].find(parent) != classToDeepParents[child].end()) {
-			return true;
-		}
-		return false;
-	}
-
-private:
-	std::map<std::string, std::set<std::string>> classToParents;
-	std::map<std::string, std::set<std::string>> classToChildren;
-
-	std::map<std::string, std::set<std::string>> classToDeepParents;
-
-	// finds, if there is a path from one vertice to another
-	// if one class is anothers child or one class is anothers parents
-	// for all classes in graph
-	// returns map <form -> to>
-	std::map<std::string, std::set<std::string>> findPaths(const std::map<std::string, std::set<std::string>> &graph) {
-		// dictionary <class name> -> <numerical id>
-		std::map<std::string, int> nameToId = std::map<std::string, int>();
-		// and inverted
-		std::map<int, std::string> idToName = std::map<int, std::string>();
-		int currentNum = 0;
-		for (auto infoAboutOne : classToParents) {
-			nameToId[infoAboutOne.first] = currentNum;
-			idToName[currentNum] = infoAboutOne.first;
-			++currentNum;
-		}
-
-		// create matrix for Floyd-Warshall
-		std::vector<std::vector<bool>> matrix = std::vector< std::vector<bool>>(nameToId.size(), std::vector<bool>(nameToId.size(), false));
-		for (auto infoAboutOne : graph) {
-			std::string from = infoAboutOne.first;
-			for (auto to : infoAboutOne.second) {
-				matrix[nameToId[from]][nameToId[to]] = true;
-			}
-		}
-
-		// Floyd-Warshall
-		for (std::size_t iter = 0; iter < matrix.size(); iter++) {
-			for (std::size_t row = 0; row < matrix.size(); row++) {
-				for (std::size_t col = 0; col < matrix.size(); col++) {
-					if (matrix[row][iter] && matrix[iter][col]) {
-						matrix[row][col] = true;
-					} // else - like it was before
-				}
-			}
-		}
-		// i'm my parent
-		for (std::size_t i = 0; i < matrix.size(); i++) {
-			matrix[i][i] = true;
-		}
-
-		// make result
-		std::map<std::string, std::set<std::string>> result = std::map<std::string, std::set<std::string>>();
-		for (std::size_t row = 0; row < matrix.size(); row++) {
-			for (std::size_t col = 0; col < matrix.size(); col++) {
-				if (matrix[row][col]) {
-					result[idToName[row]].insert(idToName[col]);
-				}
-			}
-		}
-
-		return result;
-	}
-};
-
-// GLOBAL GRAPH WITH INFORMATION ABOUT ALL CLASSES
-ClassesGraph cg = ClassesGraph();
-
-class AppenderToClassesGraph {
-public:
-	AppenderToClassesGraph(std::string child, std::string parentsStr) {
-		cg.AppendClassWithParents(child, parentsStr);
+	TMapWriter() {
+		T *self = static_cast<T*>(this);
+		self->tmap.insert({ T::GetStaticClassName(), self });
 	}
 };
 
 // something that TYPEID returns
 struct typeId {	
-	typeId(std::string _className, std::string _parentClassesStr) : className(_className) {
-		// find all parents from string
-		ConvertStringToSet(_parentClassesStr, parentClasses);
-	}
+	typeId(std::string _className, std::string _parentClassesStr) : className(_className) {}
 
 	std::string name() { return className; }
 
@@ -144,8 +55,6 @@ struct typeId {
 
 private:
 	std::string className;
-	// direct parents
-	std::set<std::string> parentClasses;
 };
 
 template <typename T>
@@ -158,18 +67,16 @@ typeId GetTypeId(T) {
 	return GetTypeId<T>();
 }
 
-template <typename DestType, typename SourceType>
-DestType* DynamicCast(SourceType *objectPtr) {
+template <typename DestType>
+DestType* DynamicCast(BaseParent *objectPtr) {
 	// know real type of the object
 	std::string realTypeName = objectPtr->GetClassName();
 	
 	std::string destTypeName = DestType::GetStaticClassName();
-	std::string sourceTypeName = SourceType::GetStaticClassName();
-	
-	if (cg.isDeepPathFromChildToParent(realTypeName, sourceTypeName) 
-		&& (cg.isDeepPathFromChildToParent(sourceTypeName, destTypeName) 
-			|| cg.isDeepPathFromChildToParent(destTypeName, sourceTypeName))) {
-		return staticCastUnsafe<DestType*>(objectPtr);
+
+	auto it = objectPtr->tmap.find(destTypeName);
+	if (it != objectPtr->tmap.end()) {
+		return static_cast<DestType*>(it->second);
 	}
 
 	return nullptr;
@@ -177,34 +84,32 @@ DestType* DynamicCast(SourceType *objectPtr) {
 
 /*TEST CLASSES*/
 
-USE_RTTI(A) class A : BASE_PARENT {
+USE_RTTI(A) class A : BASE_PARENT(A) {
 public:
 	GET_CLASS_NAME(A)
 	int a;
 };
 
-USE_RTTI(B, A) class B : public A, BASE_PARENT {
+USE_RTTI(B, A) class B : public A, BASE_PARENT(B) {
 public:
 	GET_CLASS_NAME(B)
 	int b;
 };
 
-USE_RTTI(C) class C : BASE_PARENT {
+USE_RTTI(C) class C : BASE_PARENT(C) {
 public:
 	GET_CLASS_NAME(C)
 	int c;
 };
 
 
-USE_RTTI(D, B, C) class D : public B, public C, BASE_PARENT {
+USE_RTTI(D, B, C) class D : public B, public C, BASE_PARENT(D) {
 public:
 	GET_CLASS_NAME(D)
 	int d;
 };
 
 int main() {
-	cg.CalculateExistanseOfPaths();
-
 	A a = A();
 	B b = B();
 	C c = C();
@@ -269,14 +174,23 @@ int main() {
 
 	std::cout << std::endl;
 	std::cout << "cd " << cd << std::endl;
-	B *bcd = DynamicCast<B>(cd);				// nullptr - impossible to convert
+	B *bcd = DynamicCast<B>(cd);				// it works ok (sidecast)
 	std::cout << "bcd " << bcd << std::endl;
 
 	std::cout << std::endl;
 	std::cout << "bd " << bd << std::endl;
-	C *cbd = DynamicCast<C>(bd);				// nullptr - impossible to convert
+	C *cbd = DynamicCast<C>(bd);				// it works ok (sidecast)
 	std::cout << "cbd " << cbd << std::endl;
 
+	std::cout << std::endl;
+	std::cout << "aa " << aa << std::endl;
+	C *caa = DynamicCast<C>(aa);				// it doesn't work
+	std::cout << "caa " << caa << std::endl;
+
+	std::cout << std::endl;
+	std::cout << "ab " << ab << std::endl;
+	C *cab = DynamicCast<C>(ab);				// it doesn't work
+	std::cout << "cab " << cab << std::endl;
 
 	system("pause");
 	return 0;
